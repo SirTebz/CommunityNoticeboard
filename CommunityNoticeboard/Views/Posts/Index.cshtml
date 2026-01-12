@@ -1,0 +1,73 @@
+﻿@model PostIndexViewModel
+@{
+    ViewData["Title"] = "Community Noticeboard";
+}
+
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h1 class="display-5">
+            <i class="bi bi-clipboard-check text-primary"></i> Community Noticeboard
+        </h1>
+        <p class="text-muted">Stay informed and connected with your community</p>
+    </div>
+    <div class="col-md-4 text-end">
+        @if (User.Identity?.IsAuthenticated == true)
+        {
+            <a asp-action="Create" class="btn btn-primary">
+                <i class="bi bi-plus-circle"></i> Create New Post
+            </a>
+        }
+    </div>
+</div>
+
+<!-- Search & Filter -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form asp-action="Index" method="get" class="row g-3">
+            <div class="col-md-6">
+                <input type="text" name="searchTerm" value="@Model.SearchTerm" class="form-control" placeholder="Search posts...">
+            </div>
+            <div class="col-md-4">
+                <select name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    @foreach (PostCategory cat in Enum.GetValues(typeof(PostCategory)))
+                    {
+                        <option value="@((int)cat)" selected="@(Model.FilterCategory == cat)">@cat</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-search"></i> Filter
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Pinned Posts -->
+@if (Model.PinnedPosts.Any())
+{
+    <h4 class="mb-3"><i class="bi bi-pin-angle-fill text-warning"></i> Pinned Announcements</h4>
+    @foreach (var post in Model.PinnedPosts)
+    {
+        <partial name="_PostCard" model="post" />
+    }
+    <hr class="my-4" />
+}
+
+<!-- Regular Posts -->
+<h4 class="mb-3"><i class="bi bi-card-list"></i> Recent Posts</h4>
+@if (Model.RegularPosts.Any())
+{
+    @foreach (var post in Model.RegularPosts)
+    {
+        <partial name="_PostCard" model="post" />
+    }
+}
+else
+{
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> No posts found. Be the first to create one!
+    </div>
+}
