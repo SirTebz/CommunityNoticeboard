@@ -39,6 +39,7 @@ builder.Services.AddDefaultIdentity<ApplicationUser>(options => {
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddRazorPages();
+builder.Services.AddHealthChecks();
 
 // Authorization policies
 builder.Services.AddAuthorization(options =>
@@ -55,7 +56,11 @@ using (var scope = app.Services.CreateScope())
     var services = scope.ServiceProvider;
     try
     {
-        await DbInitializer.Initialize(services);
+        await DbInitializer.Initialize(
+            services,
+            app.Environment.IsDevelopment(),
+            builder.Configuration["BootstrapAdmin:Email"],
+            builder.Configuration["BootstrapAdmin:Password"]);
     }
     catch (Exception ex)
     {
@@ -88,5 +93,6 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Posts}/{action=Index}/{id?}");
 app.MapRazorPages();
+app.MapHealthChecks("/health").AllowAnonymous();
 
 app.Run();

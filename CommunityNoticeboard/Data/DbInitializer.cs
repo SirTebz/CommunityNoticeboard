@@ -1,108 +1,73 @@
-﻿using CommunityNoticeboard.Models;
+using CommunityNoticeboard.Models;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
-namespace CommunityNoticeboard.Data
+namespace CommunityNoticeboard.Data;
+
+public static class DbInitializer
 {
-    public static class DbInitializer
+    public static async Task Initialize(
+        IServiceProvider serviceProvider,
+        bool seedDevelopmentData,
+        string? bootstrapAdminEmail,
+        string? bootstrapAdminPassword)
     {
-        public static async Task Initialize(IServiceProvider serviceProvider)
-        {
-            var context = serviceProvider.GetRequiredService<ApplicationDbContext>();
-            var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-            var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var context = serviceProvider.GetRequiredService<ApplicationDbContext>();
+        var userManager = serviceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var roleManager = serviceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
-            // Ensure database is created
+        if (context.Database.IsSqlServer())
+            await context.Database.MigrateAsync();
+        else
             await context.Database.EnsureCreatedAsync();
 
-            // Seed Roles
-            string[] roles = { "Admin", "User" };
-            foreach (var role in roles)
-            {
-                if (!await roleManager.RoleExistsAsync(role))
-                {
-                    await roleManager.CreateAsync(new IdentityRole(role));
-                }
-            }
-
-            // Seed Admin User
-            var adminEmail = "admin@noticeboard.com";
-            var adminUser = await userManager.FindByEmailAsync(adminEmail);
-
-            if (adminUser == null)
-            {
-                adminUser = new ApplicationUser
-                {
-                    UserName = adminEmail,
-                    Email = adminEmail,
-                    EmailConfirmed = true
-                };
-
-                var result = await userManager.CreateAsync(adminUser, "Admin@123");
-
-                if (result.Succeeded)
-                {
-                    await userManager.AddToRoleAsync(adminUser, "Admin");
-                }
-            }
-
-            // Seed Test User
-            var testEmail = "user@noticeboard.com";
-            var testUser = await userManager.FindByEmailAsync(testEmail);
-
-            if (testUser == null)
-            {
-                testUser = new ApplicationUser
-                {
-                    UserName = testEmail,
-                    Email = testEmail,
-                    EmailConfirmed = true
-                };
-
-                var result = await userManager.CreateAsync(testUser, "User@123");
-
-                if (result.Succeeded)
-                {
-                    await userManager.AddToRoleAsync(testUser, "User");
-                }
-            }
-
-            // Seed Sample Posts
-            if (!context.Posts.Any())
-            {
-                var samplePosts = new List<Post>
-                {
-                    new Post
-                    {
-                        Title = "Welcome to the Community Noticeboard!",
-                        Content = "This is your central hub for community announcements, events, and discussions. Feel free to share updates and connect with your neighbors.",
-                        Category = PostCategory.Announcement,
-                        IsPinned = true,
-                        CreatedAt = DateTime.UtcNow.AddDays(-7),
-                        UserId = adminUser.Id
-                    },
-                    new Post
-                    {
-                        Title = "Community Cleanup Day - This Saturday",
-                        Content = "Join us this Saturday at 9 AM for our monthly community cleanup. We'll be focusing on the park area. Gloves and bags will be provided!",
-                        Category = PostCategory.Event,
-                        IsPinned = false,
-                        CreatedAt = DateTime.UtcNow.AddDays(-2),
-                        UserId = adminUser.Id
-                    },
-                    new Post
-                    {
-                        Title = "New Recycling Guidelines",
-                        Content = "The city has updated recycling guidelines. Please make sure to rinse all containers and separate plastics by number. More details on the city website.",
-                        Category = PostCategory.News,
-                        IsPinned = true,
-                        CreatedAt = DateTime.UtcNow.AddDays(-5),
-                        UserId = testUser.Id
-                    }
-                };
-
-                context.Posts.AddRange(samplePosts);
-                await context.SaveChangesAsync();
-            }
+        foreach (var role in new[] { "Admin", "User" })
+        {
+            if (!await roleManager.RoleExistsAsync(role))
+                await roleManager.CreateAsync(new IdentityRole(role));
         }
+
+        if (!seedDevelopmentData)
+        {
+            await CreateBootstrapAdminIfConfigured(userManager, bootstrapAdminEmail, bootstrapAdminPassword);
+            return;
+        }
+
+        var admin = await CreateUserIfMissing(userManager, "admin@noticeboard.com", "Admin@123", "Admin");
+        var member = await CreateUserIfMissing(userManager, "user@noticeboard.com", "User@123", "User");
+
+        if (await context.Posts.AnyAsync()) return;
+
+        context.Posts.AddRange(
+            new Post { Title = "Welcome to the Community Noticeboard!", Content = "This is your central hub for community announcements, events, and discussions. Feel free to share updates and connect with your neighbours.", Category = PostCategory.Announcement, IsPinned = true, CreatedAt = DateTime.UtcNow.AddDays(-7), UserId = admin.Id },
+            new Post { Title = "Community Cleanup Day - This Saturday", Content = "Join us this Saturday at 9 AM for our monthly community cleanup. We will focus on the park area; gloves and bags are provided.", Category = PostCategory.Event, CreatedAt = DateTime.UtcNow.AddDays(-2), UserId = admin.Id },
+            new Post { Title = "New Recycling Guidelines", Content = "The city has updated recycling guidelines. Please rinse containers and separate plastics by number before collection day.", Category = PostCategory.News, IsPinned = true, CreatedAt = DateTime.UtcNow.AddDays(-5), UserId = member.Id });
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task<ApplicationUser> CreateUserIfMissing(UserManager<ApplicationUser> userManager, string email, string password, string role)
+    {
+        var user = await userManager.FindByEmailAsync(email);
+        if (user is null)
+        {
+            user = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true };
+            var result = await userManager.CreateAsync(user, password);
+            if (!result.Succeeded) throw new InvalidOperationException($"Unable to create the development user {email}.");
+        }
+
+        if (!await userManager.IsInRoleAsync(user, role))
+            await userManager.AddToRoleAsync(user, role);
+        return user;
+    }
+
+    private static async Task CreateBootstrapAdminIfConfigured(UserManager<ApplicationUser> userManager, string? email, string? password)
+    {
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password)) return;
+        if (await userManager.FindByEmailAsync(email) is not null) return;
+
+        var admin = new ApplicationUser { UserName = email, Email = email, EmailConfirmed = true };
+        var result = await userManager.CreateAsync(admin, password);
+        if (!result.Succeeded) throw new InvalidOperationException("Unable to create the production bootstrap administrator.");
+        await userManager.AddToRoleAsync(admin, "Admin");
     }
 }
