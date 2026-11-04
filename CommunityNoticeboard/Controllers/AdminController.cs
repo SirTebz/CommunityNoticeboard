@@ -55,4 +55,34 @@ public class AdminController : Controller
         }
         return View(model);
     }
+
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> UpdateRole(string userId, string role)
+    {
+        if (role is not ("Admin" or "User")) return BadRequest();
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user is null) return NotFound();
+
+        if (user.Id == _userManager.GetUserId(User))
+        {
+            TempData["ErrorMessage"] = "You cannot change your own administrator role.";
+            return RedirectToAction(nameof(Members));
+        }
+
+        var currentRoles = await _userManager.GetRolesAsync(user);
+        var removeResult = await _userManager.RemoveFromRolesAsync(user, currentRoles);
+        if (!removeResult.Succeeded)
+        {
+            TempData["ErrorMessage"] = "The member role could not be updated.";
+            return RedirectToAction(nameof(Members));
+        }
+
+        var addResult = await _userManager.AddToRoleAsync(user, role);
+        TempData[addResult.Succeeded ? "SuccessMessage" : "ErrorMessage"] = addResult.Succeeded
+            ? $"{user.Email} is now a {role}."
+            : "The member role could not be updated.";
+        return RedirectToAction(nameof(Members));
+    }
 }
