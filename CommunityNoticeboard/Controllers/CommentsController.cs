@@ -3,6 +3,7 @@ using CommunityNoticeboard.Models;
 using CommunityNoticeboard.ViewModels;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 
 namespace CommunityNoticeboard.Controllers
 {
@@ -19,6 +20,7 @@ namespace CommunityNoticeboard.Controllers
 
         // POST: Comments/Create
         [HttpPost]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(CommentCreateViewModel model)
         {
@@ -46,11 +48,17 @@ namespace CommunityNoticeboard.Controllers
 
         // POST: Comments/Delete/5
         [HttpPost]
+        [Authorize]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Delete(int id, int postId)
         {
             var comment = await _context.Comments.FindAsync(id);
             if (comment == null)
+            {
+                return NotFound();
+            }
+
+            if (comment.PostId != postId)
             {
                 return NotFound();
             }

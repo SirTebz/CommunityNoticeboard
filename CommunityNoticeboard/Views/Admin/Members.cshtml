@@ -1,0 +1,4 @@
+@model List<MemberViewModel>
+@{ ViewData["Title"] = "Member management"; }
+<section class="page-heading"><div><p class="eyebrow">ADMINISTRATION</p><h1>Members</h1><p>View community membership and contribution activity.</p></div><a asp-controller="Admin" asp-action="Index" class="btn btn-quiet"><i class="bi bi-arrow-left"></i> Admin dashboard</a></section>
+<section class="surface"><div class="table-responsive"><table class="table admin-table"><thead><tr><th>Member</th><th>Role</th><th>Posts</th><th>Comments</th></tr></thead><tbody>@foreach(var member in Model) { <tr><td><div class="member-cell"><span class="avatar">@member.UserName.Substring(0, 1).ToUpper()</span><span><strong>@member.UserName</strong><small>@member.Email</small></span></div></td><td>@foreach(var role in member.Roles) { <span class="role-chip">@role</span> }</td><td>@member.PostCount</td><td>@member.CommentCount</td></tr>}</tbody></table></div></section>
